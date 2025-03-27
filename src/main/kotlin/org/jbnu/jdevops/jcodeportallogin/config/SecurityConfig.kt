@@ -3,41 +3,41 @@ package org.jbnu.jdevops.jcodeportallogin.config
 import org.jbnu.jdevops.jcodeportallogin.security.CustomAuthenticationSuccessHandler
 import org.jbnu.jdevops.jcodeportallogin.security.CustomLogoutSuccessHandler
 import org.jbnu.jdevops.jcodeportallogin.security.JwtAuthenticationFilter
-import org.jbnu.jdevops.jcodeportallogin.security.KeycloakAuthFilter
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
-import org.springframework.security.web.csrf.CookieCsrfTokenRepository
 import org.springframework.web.cors.CorsConfiguration
 
 @Configuration
+@EnableMethodSecurity
 class SecurityConfig {
     @Value("\${front.domain}")
     private lateinit var frontDomain: String
 
-    @Value("\${nodejs.domain}")
-    private lateinit var nodejsDomain: String
+    @Value("\${router.domain}")
+    private lateinit var routerDomain: String
 
     @Bean
-    fun securityFilterChain(http: HttpSecurity, keycloakAuthFilter: KeycloakAuthFilter,
+    fun securityFilterChain(http: HttpSecurity,
                             customAuthenticationSuccessHandler: CustomAuthenticationSuccessHandler,
                             customLogoutSuccessHandler: CustomLogoutSuccessHandler,
                             jwtAuthenticationFilter: JwtAuthenticationFilter
     ): SecurityFilterChain {
         http
-//            // CSRF 보호 활성화하되, API 경로는 CSRF 검증에서 제외 (필요에 따라 조정)
-//            .csrf { csrf ->
-//                csrf.ignoringRequestMatchers("/api/**", "/oidc/login", "/logout")
-//            }
+            // CSRF 보호 활성화하되, API 경로는 CSRF 검증에서 제외 (필요에 따라 조정)
+            .csrf { csrf ->
+                csrf.ignoringRequestMatchers("/api/**", "/oidc/login", "/logout")
+            }
             .cors { cors ->
                 cors.configurationSource {
                     val configuration = CorsConfiguration()
-                    configuration.allowedOrigins = listOf(frontDomain, nodejsDomain)
+                    configuration.allowedOrigins = listOf(frontDomain, routerDomain)
                     configuration.allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
                     configuration.allowedHeaders = listOf("*")
                     configuration.exposedHeaders = listOf("Authorization", "Set-Cookie")
@@ -50,10 +50,7 @@ class SecurityConfig {
                     .requestMatchers("/login", "/error", "/oauth2/**").permitAll()
                     .requestMatchers("/api/auth/signup", "/api/auth/login/basic", "/api/auth/login/oidc/success").permitAll()
                     .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                    .requestMatchers("/api/user/info", "/api/user/courses", "/api/user/**").permitAll()  // 임시
-                    .requestMatchers("/api/user/**").hasAuthority("ADMIN")  // 임시
-                    .requestMatchers("/api/user/student", "/api/user/assistant", "/api/user/professor").hasAuthority("ADMIN")
-                    .requestMatchers("/api/**").permitAll()  // 임시
+                    .requestMatchers("/actuator/prometheus").permitAll()
                     .requestMatchers("/api/**").authenticated()
                     .anyRequest().authenticated()  // 모든 요청에 대해 인증 요구
             }
@@ -67,7 +64,7 @@ class SecurityConfig {
                     .logoutSuccessUrl("/")
                     .logoutSuccessHandler(customLogoutSuccessHandler)
                     .invalidateHttpSession(true)
-                    .deleteCookies("JSESSIONID")
+                    .deleteCookies("SESSION")
             }
             .sessionManagement { sessionManagement ->
                 sessionManagement.sessionFixation { it.migrateSession() }  // 세션 고정 보호

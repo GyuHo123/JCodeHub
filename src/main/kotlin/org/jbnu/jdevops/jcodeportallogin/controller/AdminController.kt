@@ -2,56 +2,36 @@ package org.jbnu.jdevops.jcodeportallogin.controller
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
-import org.jbnu.jdevops.jcodeportallogin.dto.RegisterUserDto
-import org.jbnu.jdevops.jcodeportallogin.dto.UserDto
-import org.jbnu.jdevops.jcodeportallogin.entity.RoleType
+import jakarta.servlet.http.HttpServletRequest
+import org.jbnu.jdevops.jcodeportallogin.dto.user.UserDto
+import org.jbnu.jdevops.jcodeportallogin.dto.user.UserInfoDto
+import org.jbnu.jdevops.jcodeportallogin.dto.user.UserRoleChangeDto
 import org.jbnu.jdevops.jcodeportallogin.service.UserService
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.server.ResponseStatusException
 
 @Tag(name = "Admin API", description = "관리자 전용 사용자 관리 API")
 @RestController
 @RequestMapping("/api/users")
-@PreAuthorize("hasRole('ADMIN')") // ADMIN 권한이 없는 사용자는 모두 접근 불가
 class AdminController(private val userService: UserService) {
-    // 모든 유저 조회
+    // 모든 유저 조회 (ADMIN 전용)
     @Operation(
         summary = "모든 유저 조회",
         description = "모든 사용자 정보를 조회합니다."
     )
+    @PreAuthorize("hasRole('ADMIN')") // ADMIN 권한이 없는 사용자는 모두 접근 불가
     @GetMapping
-    fun getAllUsers(): List<UserDto> {
+    fun getAllUsers(): List<UserInfoDto> {
         return userService.getAllUsers()
     }
 
-    // 학생 계정 추가
-    @Operation(summary = "학생 계정 추가", description = "관리자가 학생 계정을 추가합니다.")
-    @PostMapping("/student")
-    fun registerStudent(@RequestBody registerUserDto: RegisterUserDto): ResponseEntity<String> {
-        val studentDto = registerUserDto.copy(role = RoleType.STUDENT)
-        return userService.register(studentDto)
-    }
-
-    // 조교 계정 추가
-    @Operation(summary = "조교 계정 추가", description = "관리자가 조교 계정을 추가합니다.")
-    @PostMapping("/assistant")
-    fun registerAssistant(@RequestBody registerUserDto: RegisterUserDto): ResponseEntity<String> {
-        val assistantDto = registerUserDto.copy(role = RoleType.ASSISTANT)
-        return userService.register(assistantDto)
-    }
-
-    // 교수 계정 추가
-    @Operation(summary = "교수 계정 추가", description = "관리자가 교수 계정을 추가합니다.")
-    @PostMapping("/professor")
-    fun registerProfessor(@RequestBody registerUserDto: RegisterUserDto): ResponseEntity<String> {
-        val professorDto = registerUserDto.copy(role = RoleType.PROFESSOR)
-        return userService.register(professorDto)
-    }
-
-    // 특정 유저 정보 조회
+    // 특정 유저 정보 조회 (ADMIN 전용)
     @Operation(summary = "특정 유저 정보 조회", description = "관리자가 특정 사용자의 정보를 조회합니다.")
+    @PreAuthorize("hasRole('ADMIN')") // ADMIN 권한이 없는 사용자는 모두 접근 불가
     @GetMapping("/{userId}")
     fun getUserById(@PathVariable userId: Long): ResponseEntity<UserDto> {
         return userService.getUserById(userId)?.let {
@@ -59,15 +39,47 @@ class AdminController(private val userService: UserService) {
         } ?: ResponseEntity.notFound().build()
     }
 
-    // 특정 유저 삭제
+    // 특정 유저 권한 변경 (ADMIN, PROFESSOR 전용)
+    @Operation(summary = "특정 유저 권한 변경", description = "관리자(or 교수)가 특정 사용자의 권한을 변경합니다.")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PROFESSOR')")
+    @PutMapping("/{userId}/role")
+    fun updateUserRole(
+        @PathVariable userId: Long,
+        @RequestBody request: UserRoleChangeDto,
+        authentication: Authentication
+    ): ResponseEntity<Unit> {
+        val email = authentication.principal as? String
+            ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing email in authentication")
+
+        userService.updateUserRole(email, userId, request.newRole, request.courseId)
+        return ResponseEntity.ok().build()
+    }
+
+    // 특정 유저 삭제 (ADMIN 전용)
     @Operation(summary = "특정 유저 삭제", description = "관리자가 특정 사용자를 삭제합니다.")
+    @PreAuthorize("hasRole('ADMIN')") // ADMIN 권한이 없는 사용자는 모두 접근 불가
     @DeleteMapping("/{userId}")
     fun deleteUser(@PathVariable userId: Long): ResponseEntity<Unit> {
-        return try {
-            userService.deleteUser(userId)
-            ResponseEntity.ok().build()
-        } catch (e: ResponseStatusException) {
-            ResponseEntity.notFound().build()
-        }
+        userService.deleteUser(userId)
+        return ResponseEntity.ok().build()
+    }
+
+    // 특정 유저 강의 탈퇴 (ADMIN, PROFESSOR 전용)
+    @Operation(summary = "특정 유저 강의 탈퇴", description = "관리자(or 교수)가 특정 사용자를 특정 강의에서 탈퇴시킵니다.")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PROFESSOR')")
+    @DeleteMapping("/{userId}/courses/{courseId}")
+    fun chaseOutCourse(@PathVariable userId: Long, @PathVariable courseId: Long, request: HttpServletRequest, authentication: Authentication): ResponseEntity<Map<String, Any>> {
+        val email = authentication.principal as? String
+            ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing email in authentication")
+
+        userService.chaseOutCourse(userId, courseId, email)
+
+        // courseId와 메시지를 Map으로 묶어서 반환
+        val response = mapOf(
+            "userId" to userId,
+            "courseId" to courseId,
+            "msg" to "Successfully left the course"
+        )
+        return ResponseEntity.ok(response)
     }
 }

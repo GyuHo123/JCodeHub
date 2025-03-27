@@ -2,7 +2,7 @@ package org.jbnu.jdevops.jcodeportallogin.controller
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
-import org.jbnu.jdevops.jcodeportallogin.dto.AssignmentDto
+import org.jbnu.jdevops.jcodeportallogin.dto.assignment.AssignmentDto
 import org.jbnu.jdevops.jcodeportallogin.service.AssignmentService
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize

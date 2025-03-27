@@ -5,49 +5,81 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import io.jsonwebtoken.Claims
 import org.jbnu.jdevops.jcodeportallogin.entity.RoleType
+import org.jbnu.jdevops.jcodeportallogin.repo.UserRepository
 import org.jbnu.jdevops.jcodeportallogin.service.token.JwtAuthService
+import org.jbnu.jdevops.jcodeportallogin.service.token.TokenType
 import org.jbnu.jdevops.jcodeportallogin.util.JwtUtil
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
+import org.springframework.util.AntPathMatcher
 import org.springframework.web.filter.OncePerRequestFilter
 
 @Component
 class JwtAuthenticationFilter(
     private val jwtAuthService: JwtAuthService,
     private val jwtUtil: JwtUtil,
+    @Value("\${front.domain}") private val frontDomain: String, // 프론트엔드 도메인
+    private val userRepository: UserRepository,
 ) : OncePerRequestFilter() {
+
+    private val logger = LoggerFactory.getLogger(JwtAuthenticationFilter::class.java)
 
     override fun doFilterInternal(
         request: HttpServletRequest,
         response: HttpServletResponse,
         filterChain: FilterChain
     ) {
+        logger.debug("Processing request: ${request.method} ${request.requestURI}")
+
         // "Authorization" 헤더에서 "Bearer {token}" 형식으로 Access Token 추출
         val accessToken = jwtUtil.extractBearerToken(request)
 
-        if (!accessToken.isNullOrEmpty() && jwtAuthService.validateToken(accessToken)) {
-            // access token이 유효하면, SecurityContext에 설정
-            val claims: Claims = jwtAuthService.getClaims(accessToken)
+        if (!accessToken.isNullOrEmpty() && jwtAuthService.validateToken(accessToken, TokenType.ACCESS)) {
+            // access token이 유효한지 확인
+            val claims: Claims = jwtAuthService.getClaims(accessToken, TokenType.ACCESS)
             val email = claims.subject
-            // 여기서는 JWT 클레임에서 role을 문자열로 저장했다고 가정
-            val role = claims["role"] as? RoleType ?: RoleType.STUDENT
+            val tokenRole = RoleType.valueOf(claims["role"].toString())
+            logger.debug("Access token validated for user: $email with role: $tokenRole")
 
-            val authorities = listOf(SimpleGrantedAuthority("ROLE_${role.toString()}"))
+            // DB에 저장된 사용자의 role 확인
+            val dbUser = userRepository.findByEmail(email)
+            if (dbUser == null || dbUser.role != tokenRole) {
+                logger.warn("Role mismatch: JWT role $tokenRole does not match DB role ${dbUser?.role}")
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Role mismatch")
+                return
+            }
+
+            // DB에 저장된 role과 일치하면 SecurityContext에 설정
+            val authorities = listOf(SimpleGrantedAuthority("ROLE_${tokenRole.toString()}"))
             val auth = UsernamePasswordAuthenticationToken(email, null, authorities)
             SecurityContextHolder.getContext().authentication = auth
         } else {
-            // access token이 없거나 유효하지 않으면, 로그아웃 처리
-            response.sendRedirect("/logout")
+            logger.warn("Invalid or missing access token, returning 401 Unauthorized")
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid or missing access token")
             return
         }
 
         filterChain.doFilter(request, response)
     }
 
-    // access token 반환 api에선 필터 제외
+    // access token 인증을 제외할 엔드포인트 설정
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
-        return request.requestURI == "/api/auth/token"
+        val matcher = AntPathMatcher()  // 와일드카드 패턴 허용 (**)
+        val excludedPaths = listOf(
+            "/api/auth/token", "/api/auth/refresh",         // access token 발급 엔드포인트
+            "/swagger-ui/**", "/v3/api-docs/**",            // swagger 관련 엔드포인트
+            "/oauth2/**", "/login",                         // 로그인 관련 엔드포인트
+            "/actuator/prometheus"                          // 프로메테우스 엔드포인트
+        )
+
+        val shouldNotFilter = excludedPaths.any { matcher.match(it, request.requestURI) }
+        if (shouldNotFilter) {
+            logger.debug("Request ${request.requestURI} is excluded from filtering")
+        }
+        return shouldNotFilter
     }
 }

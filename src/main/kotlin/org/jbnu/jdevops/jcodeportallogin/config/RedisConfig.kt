@@ -5,21 +5,23 @@ import org.springframework.boot.CommandLineRunner
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.data.redis.connection.RedisConnectionFactory
-import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory
 import org.springframework.data.redis.connection.RedisPassword
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.repository.configuration.EnableRedisRepositories
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer
 import org.springframework.data.redis.serializer.StringRedisSerializer
+import org.springframework.session.data.redis.config.annotation.web.http.EnableRedisHttpSession
 
 @Configuration
+@EnableRedisHttpSession
 @EnableRedisRepositories(basePackages = ["org.jbnu.jdevops.jcodeportallogin.repo.redis"]) // Redis 전용 리포지토리만 사용
 class RedisConfig(
-    @Value("\${spring.redis.host}") private val redisHost: String,
-    @Value("\${spring.redis.port}") private val redisPort: Int,
-    @Value("\${spring.redis.password}") private val redisPassword: String
+    @Value("\${redis.host}") private val redisHost: String,
+    @Value("\${redis.port}") private val redisPort: Int,
+    @Value("\${redis.password}") private val redisPassword: String
 ) {
 
     @Bean

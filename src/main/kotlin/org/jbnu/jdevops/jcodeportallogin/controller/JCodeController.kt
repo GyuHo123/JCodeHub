@@ -2,32 +2,47 @@ package org.jbnu.jdevops.jcodeportallogin.controller
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
-import org.jbnu.jdevops.jcodeportallogin.dto.JCodeDto
-import org.jbnu.jdevops.jcodeportallogin.dto.JCodeRequestDto
+import org.jbnu.jdevops.jcodeportallogin.dto.jcode.JCodeDto
+import org.jbnu.jdevops.jcodeportallogin.dto.jcode.JCodeMainRequestDto
 import org.jbnu.jdevops.jcodeportallogin.service.JCodeService
+import org.jbnu.jdevops.jcodeportallogin.service.token.JwtAuthService
+import org.jbnu.jdevops.jcodeportallogin.service.token.TokenType
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
+import org.springframework.web.server.ResponseStatusException
 
-@Tag(name = "JCode Admin API", description = "관리자 전용 JCode 관리 API")
+@Tag(name = "JCode Admin API", description = "JCode 관리 API (feat. 관리자)")
 @RestController
-@RequestMapping("/api/users/{userId}/courses/{courseId}/jcodes")
-@PreAuthorize("hasRole('ADMIN')") // ADMIN 권한이 없는 사용자는 모두 접근 불가
+@RequestMapping("/api/courses/{courseId}/jcodes")
 class JCodeController(
-    private val jCodeService: JCodeService
+    private val jCodeService: JCodeService,
+    private val jwtAuthService: JwtAuthService
 ) {
-    // JCode 추가 (관리자 전용)
+    // JCode 추가
     @Operation(
         summary = "JCode 추가",
         description = "관리자가 특정 강의에 대해 JCode를 생성 및 할당합니다."
     )
     @PostMapping
     fun createJCode(
-        @PathVariable userId: Long,
+        @RequestBody jcodeMainRequestDto: JCodeMainRequestDto,
         @PathVariable courseId: Long,
-        @RequestBody request: JCodeRequestDto
+        @RequestHeader("Authorization") authorization: String,
+        authentication: Authentication
     ): ResponseEntity<JCodeDto> {
-        return ResponseEntity.ok(jCodeService.createJCode(courseId, request.jcodeUrl, userId))
+        val email = authentication.principal as? String
+            ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing email in authentication")
+
+        // Authorization 헤더에서 "Bearer " 접두사를 제거하여 토큰만 추출 및 검증
+        val token = authorization.removePrefix("Bearer").trim()
+        if (!jwtAuthService.validateToken(token, TokenType.ACCESS)) {
+            throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid token")
+        }
+
+        return ResponseEntity.ok(jCodeService.createJCode(courseId, jcodeMainRequestDto.userEmail, email, token, jcodeMainRequestDto.snapshot))
     }
 
     // JCode 삭제 (관리자 전용)
@@ -35,12 +50,20 @@ class JCodeController(
         summary = "JCode 삭제",
         description = "관리자가 특정 강의에 대해 해당 사용자의 JCode를 삭제합니다."
     )
+    @PreAuthorize("hasRole('ADMIN')") // ADMIN 권한이 없는 사용자는 모두 접근 불가
     @DeleteMapping
     fun deleteJCode(
-        @PathVariable userId: Long,
-        @PathVariable courseId: Long
+        @RequestBody jcodeMainRequestDto: JCodeMainRequestDto,
+        @PathVariable courseId: Long,
+        @RequestHeader("Authorization") authorization: String,
     ): ResponseEntity<String> {
-        jCodeService.deleteJCode(userId, courseId)
+        // Authorization 헤더에서 "Bearer " 접두사를 제거하여 토큰만 추출 및 검증
+        val token = authorization.removePrefix("Bearer").trim()
+        if (!jwtAuthService.validateToken(token, TokenType.ACCESS)) {
+            throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid token")
+        }
+
+        jCodeService.deleteJCode(jcodeMainRequestDto.userEmail, courseId, token, jcodeMainRequestDto.snapshot)
         return ResponseEntity.ok("JCode deleted successfully")
     }
 }

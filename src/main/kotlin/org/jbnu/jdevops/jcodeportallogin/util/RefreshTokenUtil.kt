@@ -2,6 +2,7 @@ package org.jbnu.jdevops.jcodeportallogin.util
 
 import org.jbnu.jdevops.jcodeportallogin.service.RedisService
 import org.jbnu.jdevops.jcodeportallogin.service.token.JwtAuthService
+import org.jbnu.jdevops.jcodeportallogin.service.token.TokenType
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
 
@@ -14,7 +15,7 @@ object RefreshTokenUtil {
         email: String
     ) {
         // 1. refresh token 유효성 검증
-        if (!jwtAuthService.validateRefreshToken(refreshToken)) {
+        if (!jwtAuthService.validateToken(refreshToken, TokenType.REFRESH)) {
             throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token invalid or expired")
         }
         // 2. 블랙리스트 체크

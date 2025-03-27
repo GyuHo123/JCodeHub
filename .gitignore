@@ -38,7 +38,11 @@ out/
 
 ### Kotlin ###
 .kotlin
-/src/main/resources/application.properties
+/src/main/resources/*.properties
+!/src/main/resources/ValidationMessages*.properties
 
 ### Dev ###
 .gitmessage.txt
+
+### CICD ###
+jcode-backend.tar*

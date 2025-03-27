@@ -8,15 +8,30 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.util.*
 
+enum class TokenType {
+    ACCESS,
+    REFRESH
+}
+
 @Service
 class JwtAuthService(
-    @Value("\${jwt.secret}") private val secretKey: String,
-    @Value("\${jwt.expire}") private val expireTime: Long,
-    @Value("\${jwt.secret}") private val refreshSecretKey: String,
-    @Value("\${jwt.expire}") private val refreshExpireTime: Long
+    @Value("\${jwt.secret}") private val accessSecretKey: String,
+    @Value("\${jwt.expire}") private val accessExpireTime: Long,
+    @Value("\${jwt.refresh.secret}") private val refreshSecretKey: String,
+    @Value("\${jwt.refresh.expire}") private val refreshExpireTime: Long
 ) {
 
-    fun createToken(email: String, role: RoleType): String {
+    fun createToken(email: String, role: RoleType, tokenType: TokenType): String {
+        val secretKey = when (tokenType) {
+            TokenType.ACCESS -> accessSecretKey
+            TokenType.REFRESH -> refreshSecretKey
+        }
+
+        val expireTime = when (tokenType) {
+            TokenType.ACCESS -> accessExpireTime
+            TokenType.REFRESH -> refreshExpireTime
+        }
+
         // 시크릿 키를 바이트 배열로 변환 후 HMAC SHA 키 생성
         val key = Keys.hmacShaKeyFor(secretKey.toByteArray())
 
@@ -31,22 +46,13 @@ class JwtAuthService(
             .compact()
     }
 
-    fun createRefreshToken(email: String, role: RoleType): String {
-        val key = Keys.hmacShaKeyFor(refreshSecretKey.toByteArray())
-
-        val claims = Jwts.claims().setSubject(email)
-        claims["role"] = role
-
-        return Jwts.builder()
-            .setClaims(claims)
-            .setIssuedAt(Date())
-            .setExpiration(Date(System.currentTimeMillis() + refreshExpireTime))
-            .signWith(key)
-            .compact()
-    }
-
     // JWT에서 전체 클레임 추출
-    fun getClaims(token: String): Claims {
+    fun getClaims(token: String, tokenType: TokenType): Claims {
+        val secretKey = when (tokenType) {
+            TokenType.ACCESS -> accessSecretKey
+            TokenType.REFRESH -> refreshSecretKey
+        }
+
         return Jwts.parserBuilder()
             .setSigningKey(secretKey.toByteArray())
             .build()
@@ -55,28 +61,20 @@ class JwtAuthService(
     }
 
     // 이메일 추출
-    fun extractEmail(token: String): String {
-        return getClaims(token).subject
+    fun extractEmail(token: String, tokenType: TokenType): String {
+        return getClaims(token, tokenType).subject
     }
 
     // 토큰 검증
-    fun validateToken(token: String): Boolean {
+    fun validateToken(token: String, tokenType: TokenType): Boolean {
+        val secretKey = when (tokenType) {
+            TokenType.ACCESS -> accessSecretKey
+            TokenType.REFRESH -> refreshSecretKey
+        }
+
         return try {
             val claims = Jwts.parserBuilder()
                 .setSigningKey(secretKey.toByteArray())
-                .build()
-                .parseClaimsJws(token)
-
-            !claims.body.expiration.before(Date())
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    fun validateRefreshToken(token: String): Boolean {
-        return try {
-            val claims = Jwts.parserBuilder()
-                .setSigningKey(refreshSecretKey.toByteArray())
                 .build()
                 .parseClaimsJws(token)
 

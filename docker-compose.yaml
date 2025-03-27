@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  jcode-backend:
+    container_name: jcode-backend
+    image: jcode-backend:test
+    ports:
+      - "8080:8080"
+    volumes:
+      - jcode-backend-tmp:/tmp
+
+volumes:
+  jcode-backend-tmp:

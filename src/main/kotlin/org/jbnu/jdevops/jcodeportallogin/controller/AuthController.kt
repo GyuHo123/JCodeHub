@@ -4,8 +4,8 @@ import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
-import org.jbnu.jdevops.jcodeportallogin.dto.LoginUserDto
-import org.jbnu.jdevops.jcodeportallogin.dto.RegisterUserDto
+import org.jbnu.jdevops.jcodeportallogin.dto.auth.LoginUserDto
+import org.jbnu.jdevops.jcodeportallogin.dto.auth.RegisterUserDto
 import org.jbnu.jdevops.jcodeportallogin.service.*
 import org.jbnu.jdevops.jcodeportallogin.util.JwtUtil
 import org.springframework.http.HttpStatus
@@ -39,13 +39,24 @@ class AuthController(
         return ResponseEntity.ok(result)
     }
 
-    @GetMapping("/token")
-    fun getAccessToken(request: HttpServletRequest): ResponseEntity<Map<String, String>> {
-        val accessToken = authService.getAccessToken(request)
-        return ResponseEntity.ok(mapOf("accessToken" to accessToken))
+    @PostMapping("/token")
+    @Operation(
+        summary = "Access Token 발급",
+        description = "클라이언트의 요청에 기반하여 서버의 세션 또는 쿠키 정보를 활용해 Access Token을 발급합니다. 발급된 토큰은 응답 헤더의 'Authorization'에 'Bearer {token}' 형식으로 포함되며, CORS 설정에 따라 클라이언트에서 접근할 수 있도록 'Access-Control-Expose-Headers' 헤더가 추가됩니다."
+    )
+    fun getAccessToken(request: HttpServletRequest, response: HttpServletResponse): ResponseEntity<Map<String, String>> {
+        return try {
+            val tokens = authService.getAccessToken(request)
+            response.setHeader("Authorization", "Bearer ${tokens["accessToken"]}")
+            response.setHeader("Access-Control-Expose-Headers", "Authorization") // Authorization 헤더 클라이언트에 노출
+
+            response.addCookie(jwtUtil.createJwtCookie("jcodeRt", tokens["refreshToken"]!!))
+            ResponseEntity.ok(mapOf("message" to "Token created"))
+        } catch (ex: Exception) {
+            ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("error" to ex.message!!))
+        }
     }
 
-    // jwt token refresh
     @PostMapping("/refresh")
     @Operation(
         summary = "JWT 토큰 리프레시",
@@ -53,8 +64,12 @@ class AuthController(
     )
     fun refreshToken(request: HttpServletRequest, response: HttpServletResponse): ResponseEntity<Map<String, String>> {
         return try {
-            val result = authService.refreshTokens(request, response)
-            ResponseEntity.ok(result)
+            val tokens = authService.refreshTokens(request)
+            response.setHeader("Authorization", "Bearer ${tokens["accessToken"]}")
+            response.setHeader("Access-Control-Expose-Headers", "Authorization") // Authorization 헤더 클라이언트에 노출
+
+            response.addCookie(jwtUtil.createJwtCookie("jcodeRt", tokens["refreshToken"]!!))
+            ResponseEntity.ok(mapOf("message" to "Tokens refreshed"))
         } catch (ex: Exception) {
             ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("error" to ex.message!!))
         }

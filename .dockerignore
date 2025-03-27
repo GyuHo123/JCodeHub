@@ -1,0 +1,34 @@
+# Git 관련 파일은 빌드에 필요 없으므로 제외
+.git
+.gitignore
+
+# docker compose 관련 파일 제외
+docker-compose.yaml
+
+# Gradle 캐시 및 빌드 산출물 제외
+.gradle
+/build
+
+# gradle 디렉토리 내의 모든 파일 제외하되, gradle-wrapper.jar만 포함
+/gradle/**
+!gradle/wrapper/**
+
+# properties prod 외에 전부 제외
+/src/main/resources/*.properties
+
+# IDE 관련 파일 및 설정 (예: IntelliJ IDEA)
+.idea
+*.iml
+*.ipr
+*.iws
+
+# OS에서 자동 생성된 파일들
+.DS_Store
+Thumbs.db
+
+# 로컬 아웃풋 폴더 (필요에 따라)
+out/
+jcode-backend.tar*
+
+# 프로젝트 sub 파일 제외
+src/main/kotlin/org/jbnu/jdevops/jcodeportallogin/util/secret/**
